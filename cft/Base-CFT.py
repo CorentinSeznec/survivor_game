@@ -4,6 +4,11 @@ import pygame
 import pygame.draw
 import numpy as np
 
+from Explosion import Explosion
+from Agent import Agent
+from Player import Player
+import Astar
+
 # Global variable that may be changed when loading maze
 __screenSize__ = (2000,1200)
 __cellSize__ = 10
@@ -65,69 +70,7 @@ class Grid:
         pass
 
 
-# 
-class Agent:
-    def __init__(self, team, angleSpeed = 3, wideRange = 40, lengthRange = 100):
-        self.x = 300
-        self.y = 300
 
-        self.dir_x = 1 # 1 ou -1
-        self.dir_y = 1
-        self.speed = 0.5
-
-        self.angleOrientation = 90 # de 0 à 359 
-
-        self.angleSpeed = angleSpeed #turning speed
-        self.wideRange = wideRange
-        self.lengthRange = lengthRange
-
-        self.radius = 11 # radius of circle 
-        self.lenOrientationVector = 20
-
-        self.health = 100
-        self.team = team
-
-    def _angleToVector(self, angle):
-        return (math.cos(math.radians(angle)), -math.sin(math.radians(angle)))
-
-    def _tupleMul(self, t,a):
-        return tuple([x * a for x in t])
-
-    def _angleToOrientVector(self, angle, length = None):
-        if length is None:
-            length = self.lenOrientationVector
-        x, y = self._angleToVector(angle)
-        return (x * length, y * length) 
-
-    def drawMe(self, screen):
-
-        if self.team == 1:
-            color = (200,200,250)
-        else:
-            color = (250,200, 200)
-
-        pygame.draw.circle(screen, color = color, center = (self.x, self.y), radius = self.radius, width = 3) 
-        orientation = self._angleToOrientVector(self.angleOrientation) 
-        tmp = self.angleOrientation+self.wideRange
-        if tmp > 359:
-            tmp -= 360
-        orientation1 = self._angleToOrientVector(tmp, self.lengthRange)
-        orientation1 = (self.x+orientation1[0], self.y+orientation1[1])
-        tmp = self.angleOrientation-self.wideRange
-        if tmp < 0:
-            tmp += 360
-        orientation2 = self._angleToOrientVector(tmp, self.lengthRange)
-        orientation2 = (self.x+orientation2[0], self.y+orientation2[1])
-        pygame.draw.polygon(screen, color, [(self.x,self.y), orientation1, orientation2])
-        # petite barre de l'agent
-        pygame.draw.line(screen, (10,10,80), (self.x, self.y), 
-                (self.x+orientation[0], self.y + orientation[1]),2)
-        
-        
-        self.angleOrientation += self.angleSpeed
-        if self.angleOrientation > 359:
-            self.angleOrientation = 0
-        pass
 
 class Assets:
     def __init__(self):
@@ -141,31 +84,6 @@ class Assets:
             img.set_colorkey((0,0,0))
             img = pygame.transform.scale(img, (__cellSize__ * 3, __cellSize__ * 3))
             self.explosionAnim.append(img)
-
-class Explosion(pygame.sprite.Sprite):
-    ''' A simple class to take care of animated explosions by sprites from pygame '''
-    def __init__(self, center, anim):
-        pygame.sprite.Sprite.__init__(self)
-        self.anim = anim
-        self.image = self.anim[0]
-        self.rect = self.image.get_rect()
-        self.rect.center = center
-        self.frame = 0
-        self.last_update = pygame.time.get_ticks()
-        self.frame_rate = 50
-
-    def update(self):
-        now = pygame.time.get_ticks()
-        if now - self.last_update > self.frame_rate:
-            self.last_update = now
-            self.frame += 1
-            if self.frame == len(self.anim):
-                self.kill()
-            else:
-                center = self.rect.center
-                self.image = self.anim[self.frame]
-                self.rect = self.image.get_rect()
-                self.rect.center = center
 
 class Scene:
     _mouseCoords = (0,0)
@@ -185,84 +103,276 @@ class Scene:
         
         self.assets = Assets()
         self._font = pygame.font.SysFont('Arial',25)
-        self.agents = [Agent(1, angleSpeed = 1, wideRange = 60, lengthRange = 150)] #, Agent(2, angleSpeed = 3, wideRange = 30, lengthRange = 100), Agent(1, angleSpeed =4, wideRange= 20, lengthRange = 120)]
-        
-        self.agents[0].x = 400
+        self.agents = [Agent(1, angleSpeed = 2, wideRange = 40, lengthRange = 120), Agent(2, angleSpeed = 1, wideRange = 50, lengthRange = 100), Agent(1, angleSpeed =0.8, wideRange= 130, lengthRange = 140)]
+        self.player = Player()
+        self.agents[0].x = 700
         self.agents[0].y = 250
+        self.agents[0].speed = 4
 
-        # self.agents[1].x = 400
-        # self.agents[1].y = 10
-        # self.agents[2].angleOrientation = 76
-        # self.agents[2].x = 10
-        # self.agents[2].y = 10
+        self.agents[1].x = 200
+        self.agents[1].y = 30
+        
+ 
+        self.agents[2].x = 400
+        self.agents[2].y = 400
+        
 
 
     # speed
-    def moveAgents(self):
-        # print()
-        # for a in self.agents:
-        #     if self._grid._grid.item((a.x + _movement, a.y + _movement)):
-        #         _movement = int(random.random())
+    def update_sightAgent(self):
         X_MAX, Y_MAX = __screenSize__
+        for a in self.agents:
+            if a.team == 1:
+                color = (200,200,250)
+            else:
+                color = (250,200, 200)
+            
+            # envoi des rays:
+
+            pgauche = a.angleOrientation-a.wideRange
+            pdroite = a.angleOrientation+a.wideRange
+        
+            a.raylist = []
+            x1 = int((a.x)/__cellSize__)
+            y1 = int((a.y)/__cellSize__)
+            last_dist =  -1
+            dist = -1
+            seen_player = 0
+            detected = 0
+            for index, angleray in enumerate(np.arange(pgauche,pdroite,1)):
+                
+                ray = a._angleToOrientVector(angleray, a.lengthRange)
+        
+                x2 = int((a.x+ray[0])/__cellSize__)
+                y2 = int((a.y+ray[1])/__cellSize__)
+                if x2>= X_MAX: 
+                    x2 = X_MAX-1
+                    
+                if y2>= Y_MAX:
+                    y2 = Y_MAX-1
+                
+                # obstacle
+                pos_player_n_obstacle = self.firstObstacle(x1, y1, x2, y2)
+                pos_player, pos_obstacle = pos_player_n_obstacle[0], pos_player_n_obstacle[1]
+                
+                    
+                if pos_obstacle:
+                    dist = (pos_obstacle[0] - x1)**2 +(pos_obstacle[1] - y1)**2
+                else:
+                    dist = a.lengthRange
+                
+       
+                if pos_player and not detected:
+                    a.chasing = 1
+                    a.inSight = 1
+                    a.last_position_player = pos_player
+                    detected = 1
+                    # a.color = (255, 0,0)
+                
+                
+                
+                if last_dist != dist:
+                    if index != 0:
+                        a.raylist.append((index-1, last_dist))
+                    a.raylist.append((index, dist))
+                last_dist = dist
+                
+            # add last index
+                if not detected:
+                    a.inSight = 0
+                    
+            a.raylist.append((index, dist)) 
+
+
+       
+         
+                    
+            
+            
+            
+    def moveAgents(self):
+ 
+        X_MAX, Y_MAX = __screenSize__
+
+        
         
         for a in self.agents:  
-            tmp_x = a.x + a.movement_x
-            tmp_y = a.y + a.movement_y
             
-     
-            if tmp_x >= X_MAX or tmp_x <= 0:
+            if a.chasing:
                 
-                a.movement_x = -1*a.movement_x
-
-            elif tmp_y >= Y_MAX or tmp_y <= 0:
-
-                a.movement_y = -1*a.movement_y
-
-            # elif self._grid._grid.item((int(tmp_x/__cellSize__), int(tmp_y/__cellSize__))):
-            #     print("\ncollision")
-            #     print("pos agent", a.x, a.y)
-            #     print("obstacle",(tmp_x, tmp_y))
                
-            #     if (a.x, a.y) == (tmp_x+1, tmp_y):
-            #         a.movement_x = -1*a.movement_x
-
-            #     # on arrive en haut à gauche
-            #     elif (a.x, a.y) == (tmp_x+1, tmp_y+1):
-            #         a.x += 1
-            #         a.movement_y = -1*a.movement_y
+                # follow A*
+                 # rajouter les conditions ppur plus de sécurité
+                # if a.inSight:
+                    print("IN SIGHT")
+                    x_player, y_player = a.last_position_player 
+                    # A*
+                    
+                    self.path = Astar.astar(self._grid._grid, (int(a.x/__cellSize__), int(a.y/__cellSize__)), (x_player, y_player))
+                    self.path.pop(0)
+                 
+                    a.dir_x = self.path[0][0] 
+                    a.dir_y = self.path[0][1] 
+                    a.x = a.x + a.speed * a.dir_x
+                    a.y = a.y + a.speed * a.dir_y
+                    print("self.path", self.path)
+                    self.path.pop(0)
+                 
+                    if len(self.path) == 0:
+                        print("REACH")
+                        a.chasing = 0
+                        a.inSight = 0
+                        
+                    
+                # else:
+                #     print("NOT IN SIGHT")
+                #     a.dir_x = self.path[0][0] 
+                #     a.dir_y = self.path[0][1] 
+                #     print("self.path", self.path)
+                #     a.x = a.x + a.speed * a.dir_x
+                #     a.y = a.y + a.speed * a.dir_y
+                    
+                #     self.path.pop(0)
+                #     if len(self.path) == 0:
+                #         print("REACH")
+                #         a.chasing = 0
+                #         a.inSight = 0
+                      
+            else:
                 
-            #     # on arrive en bas à gauche
-            #     elif (a.x, a.y) == (tmp_x+1, tmp_y-1):
-            #         a.y -= 1
-            #         a.movement_x = -1*a.movement_x
+                # destination
+                dst_x = a.x + a.speed * a.dir_x
+                dst_y = a.y + a.speed * a.dir_y
+        
+                # check if not outside the map
+                def outside_map_x(dst_x):
+                    if dst_x >= X_MAX or dst_x <= 0:
+                        return 1
+                    else: 
+                        return 0
+                def outside_map_y(dst_y):
+                    if dst_y >= Y_MAX or dst_y <= 0:
+                        return 1
+                    else: 
+                        return 0
 
-
-            #     # on arrive à droite
-            #     elif (a.x, a.y) == (tmp_x-1, tmp_y):
-            #         a.movement_x = -1*a.movement_x
-
-            #     # on arrive en bas à droite
-            #     elif (a.x, a.y) == (tmp_x-1, tmp_y+1):
-            #         a.y -= 1
-            #         a.movement_x = -1*a.movement_x
-
-            #     # on arrive en bas à gauche
-            #     elif (a.x, a.y) == (tmp_x-1, tmp_y-1):
-            #         a.y -= 1
-            #         a.movement_x = -1*a.movement_x
-
-
-
-            #     elif (a.x, a.y) == (tmp_x, tmp_y+1):
-            #         a.movement_y = -1*a.movement_y
-
-            #     elif (a.x, a.y) == (tmp_x, tmp_y-1):
-            #         a.movement_y = -1*a.movement_y
-
+                dst_x_is_out = outside_map_x(dst_x)
+                dst_y_is_out = outside_map_y(dst_y)
                 
+                #considérer les bords comme un mur
+                if not (dst_x_is_out or dst_y_is_out):
+                    # if obstacles
+                    if self._grid._grid.item((int(dst_x/__cellSize__), int(dst_y/__cellSize__))):
+                        
+                        directions = [a.dir_x, a.dir_y]
+                        is_free_path_x_y = [1, 1]
+                        
+                        # diagonale
+                        if all(directions) in [-1,1] :
+                            
+                            #check if there is a block next to the obstacle
+                            if self._grid._grid.item((int((a.x+directions[0])/__cellSize__), int(a.y/__cellSize__))):# or outside_map_x(a.x+directions[0]) or outside_map_y(a.y+directions[1]) :
+                                #obstacle 
+                                is_free_path_x_y[0] = 0
+                                
+                            if self._grid._grid.item((int(a.x/__cellSize__), int((a.y+directions[1])/__cellSize__))):# or outside_map_x(a.x+directions[0]) or outside_map_y(a.y+directions[1]):
+                                #obstacle
+                                is_free_path_x_y[1] = 0
+                                
 
-            a.x += a.movement_x
-            a.y += a.movement_y
+                            if all(is_free_path_x_y):
+                    
+                                
+                                random_dir = [1, 2, 3] 
+                            
+                                
+                                if self._grid._grid.item((int((a.x+directions[0])/__cellSize__), int((a.y-directions[1])/__cellSize__))):# or outside_map_x(a.x+directions[0]) or outside_map_y(a.y-directions[1]):
+                                    #obstacle
+                                    random_dir[1] = 0
+                                if self._grid._grid.item((int((a.x-directions[0])/__cellSize__), int((a.y+directions[1])/__cellSize__))):# or outside_map_x(a.x-directions[0]) or outside_map_y(a.y+directions[1]):
+                                    #obstacle
+                                    random_dir[2] = 0
+                            
+                                
+                                random_dir  = [random_dir[i] for i in range(3) if random_dir[i] != 1]
+            
+                                selected_dir = random.choice(random_dir)
+                                
+                                if selected_dir == 1:
+                                    a.dir_x = -1*a.dir_x
+                                    a.dir_y = -1*a.dir_y
+                                elif selected_dir == 2:
+                                    a.dir_y = -1*a.dir_y
+                                else :
+                                    a.dir_x = -1*a.dir_x
+                                
+                                
+                            
+                            elif sum(is_free_path_x_y) == 1:
+                    
+                                
+                                if is_free_path_x_y[0] == 0:
+                                    a.dir_x = -1*a.dir_x
+                                else:
+                                    a.dir_y = -1*a.dir_y
+                                # partir coté opposé
+
+                            else:
+                    
+                                # revient d'ou il vient
+                                a.dir_x = -1*a.dir_x
+                                a.dir_y = -1*a.dir_y
+                        
+                        else: # straight direction
+                            a.dir_x = -1*a.dir_x
+                            a.dir_y = -1*a.dir_y
+                            
+                else: # outside the map
+                    if dst_x_is_out:
+                        a.dir_x = -1*a.dir_x
+                    else:
+                        a.dir_y = -1*a.dir_y
+                    
+
+                a.x += a.speed * a.dir_x
+                a.y += a.speed * a.dir_y
+            
+            
+    def movePlayer(self):
+    
+        X_MAX, Y_MAX = __screenSize__
+
+        # destination
+        dst_x = self.player.x + self.player.speed * self.player.dir_x
+        dst_y = self.player.y + self.player.speed * self.player.dir_y
+    
+        # check if not outside the map
+        def outside_map_x(dst_x):
+            if dst_x >= X_MAX or dst_x <= 0:
+                return 1
+            else: 
+                return 0
+        def outside_map_y(dst_y):
+            if dst_y >= Y_MAX or dst_y <= 0:
+                return 1
+            else: 
+                return 0
+            
+        def wall(dst_x, dst_y):
+            if self._grid._grid.item((int(dst_x/__cellSize__), int(dst_y/__cellSize__))):
+                return 1
+            else:
+                return 0
+
+        dst_x_is_out = outside_map_x(dst_x)
+        dst_y_is_out = outside_map_y(dst_y)
+        
+        
+        if not dst_x_is_out and not dst_y_is_out:
+            is_wall = wall(dst_x, dst_y)
+            if not is_wall:
+                self.player.x += self.player.speed * self.player.dir_x
+                self.player.y += self.player.speed * self.player.dir_y
         
 
     def drawMe(self):
@@ -275,7 +385,8 @@ class Scene:
 
         for agent in self.agents:
             agent.drawMe(self._screen)
-
+        
+        self.player.drawMe(self._screen)
 
         for x in range(__gridDim__[0]):
             for y in range(__gridDim__[1]):
@@ -297,22 +408,35 @@ class Scene:
     def drawText(self, text, position, color = (255,64,64)):
         self._screen.blit(self._font.render(text,1,color),position)
 
-    def _mapOnPath(self, x1, y1, x2, y2, fmap): # return coord of the raysight
+    def _mapOnPath(self, x1, y1, x2, y2, fmap):  
         dx = abs(x2 - x1)
         dy = abs(y2 - y1)
+        
+        x_player = int(self.player.x/__cellSize__)
+        y_player = int(self.player.y/__cellSize__)
+
         xincr = 1 if x1 < x2 else -1
         yincr = 1 if y1 < y2 else -1
-
+     
+        seen_player = 0
         x = x1; y = y1
         if (dx > dy):
             e = dx // 2
             for i in range(dx):
                 x += xincr; e += dy
+                
                 if e > dx:
                     e -= dx; y += yincr
-                if (retIfNotNone := fmap(x,y)) is not None:
-
-                    return retIfNotNone
+                
+                if (x,y) == (x_player,y_player):
+                    seen_player = (x,y)
+                    
+              
+                if (retIfNotNone := fmap(x,y)) :
+                    
+                    return seen_player, retIfNotNone
+     
+            return seen_player, 0
     
         else:
             e = dy // 2
@@ -320,12 +444,25 @@ class Scene:
                 y += yincr; e += dx
                 if e > dy:
                     e -= dy; x += xincr
-                if (retIfNotNone := fmap(x,y)) is not None:
- 
-                    return retIfNotNone
-        return None 
+                
+                if (x,y) == (x_player,y_player):
+                    seen_player = (x,y)
+                    
+    
+                if (retIfNotNone := fmap(x,y)) :
+                    
+                    return seen_player, retIfNotNone
 
+            return seen_player, 0
+        print("issue")
+        return (0,0)
+
+
+        
+        
+        
     def canSee(self, x1, y1, x2, y2, fog = 20):
+        
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
 
         # 1) Checks the distance
@@ -337,17 +474,34 @@ class Scene:
 
         # 3) Checks on the tiles (Brensenham)
         _mapLevel = lambda x, y : True if self._grid._grid[x, y] == 1 else None
-        return self._mapOnPath(x1, y1, x2, y2, _mapLevel) is None 
+       
+        
+        return self._mapOnPath(x1, y1, x2, y2, _mapLevel)
 
     # None if there is no obstacle on the path, otherwise gives the first obstacle coordinates
     def firstObstacle(self, x1, y1, x2, y2):
+        X_MAX, Y_MAX = __screenSize__ 
+        X_MAX, Y_MAX = int(X_MAX/__cellSize__), int(Y_MAX/__cellSize__)
+        
+        x_player = int(self.player.x/__cellSize__)
+        y_player = int(self.player.y/__cellSize__)
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-        _mapLevel = lambda x, y : (x,y) if self._grid._grid[x, y] > 0 else None
+        if x2 >= X_MAX:
+            x2 = X_MAX -2
+        if y2 >= Y_MAX:
+            y2 = Y_MAX -2
+        
+        _mapLevel = lambda x, y : (x,y) if self._grid._grid[x, y] == 1 else 0
         return self._mapOnPath(x1, y1, x2, y2, _mapLevel) 
 
     def update(self):
+        self.update_sightAgent()
         self.moveAgents()
+    
+        self.player.input()
+        self.movePlayer()
         self.allsprites.update()
+        
 
     def eventClic(self,coord,b): # ICI METTRE UN A* EN TEMPS REEL
         pass
@@ -387,12 +541,12 @@ def main():
         color_ray_valid = (255,60,60)
         color_ray_invalid = (60, 255, 60)
         pygame.draw.line(scene._screen, color_ray_valid if checksee else color_ray_invalid,  (x1*__cellSize__, y1 *__cellSize__), pygame.mouse.get_pos())
-        if (obstacle := scene.firstObstacle(x1, y1, x2, y2)) is not None:
-            ox, oy = obstacle
-            pygame.draw.rect(scene._screen, (200,100,100), 
-                (ox*__cellSize__ , oy*__cellSize__, __cellSize__, __cellSize__)) # color of the wall if pointer on it
+        # if (obstacle := scene.firstObstacle(x1, y1, x2, y2))[1] is not None:
+        #     ox, oy = obstacle[1]
+        #     pygame.draw.rect(scene._screen, (200,100,100), 
+        #         (ox*__cellSize__ , oy*__cellSize__, __cellSize__, __cellSize__)) # color of the wall if pointer on it
 
-        scene.drawText("CFT" + additionalMessage, (10,10))
+        # scene.drawText("CFT" + additionalMessage, (10,10))
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT: 
