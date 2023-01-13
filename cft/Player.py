@@ -27,34 +27,12 @@ class Player:
         return (math.cos(math.radians(angle)), -math.sin(math.radians(angle)))
     
     def drawMe(self, screen):
-
         color = (0, 255, 0)
-
         pygame.draw.circle(screen, color = color, center = (self.x, self.y), radius = self.radius, width = 2) 
-        
-        orientation = self._angleToOrientVector(self.angleOrientation) 
-
-        
-        # tmp = self.angleOrientation+self.wideRange
-        # if tmp > 359:
-        #     tmp -= 360
-        # orientation1 = self._angleToOrientVector(tmp, self.lengthRange)
-        # orientation1 = (self.x+orientation1[0], self.y+orientation1[1])
-        # tmp = self.angleOrientation-self.wideRange
-        # if tmp < 0:
-        #     tmp += 360
-        # orientation2 = self._angleToOrientVector(tmp, self.lengthRange)
-        # orientation2 = (self.x+orientation2[0], self.y+orientation2[1])
-        
-        
         # petite barre de l'agent
+        orientation = self._angleToOrientVector(self.angleOrientation) 
         pygame.draw.line(screen, (10,10,80), (self.x, self.y), 
                 (self.x+orientation[0], self.y + orientation[1]),1)
-        
-        
-        # self.angleOrientation += self.angleSpeed
-        # if self.angleOrientation > 359:
-        #     self.angleOrientation = 0
         pass
     
             
