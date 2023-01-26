@@ -2,35 +2,36 @@ import pygame
 import math
 import random
 
+### ADDED FROM THE ORIGINAL CODE
 class Agent:
     def __init__(self,x, y, team):
         self.x = x
         self.y = y
         self.team = team
-        
+        self.count =0
         if team ==1:
-            self.speed = 2
+            self.speed = 1
             self.angleSpeed = 2   # turning speed
             self.wideRange = 70     #  wide sight
-            self.lengthRange = 70 # length of sight
+            self.lengthRange = 60 # length of sight
             
-        if team ==2:
-            self.speed = 3.5
+        if team ==2: # gray
+            self.speed = 1.3
             self.angleSpeed = 2   # turning speed
             self.wideRange = 40     #  wide sight
-            self.lengthRange = 80 # length of sight
+            self.lengthRange = 70 # length of sight
         
-        if team ==3:
-            self.speed = 0.5
+        if team ==3: # yellow
+            self.speed = 0.25
             self.angleSpeed = 1   # turning speed
             self.wideRange = 90     #  wide sight
-            self.lengthRange = 200 # length of sight
+            self.lengthRange = 150 # length of sight
         
-        if team ==4:
-            self.speed = 1
-            self.angleSpeed = 1   # turning speed
-            self.wideRange = 50     #  wide sight
-            self.lengthRange = 60 # length of sight
+        if team ==4: # pink
+            self.speed = 0.25
+            self.angleSpeed = 0.5   # turning speed
+            self.wideRange = 20     #  wide sight
+            self.lengthRange = 40 # length of sight
         
         directions = [1,-1]
         self.dir_x = random.choice(directions) 
@@ -75,7 +76,7 @@ class Agent:
             if self.team == 1:
                 color = (200,200,250)
             elif self.team == 2:
-                color = (219, 23, 2)#
+                color = (48,48,48)#
             elif self.team == 3:
                 color = (255, 203, 96)
             elif self.team == 4:

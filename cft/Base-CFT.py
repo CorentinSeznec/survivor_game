@@ -9,7 +9,7 @@ import time
 from Explosion import Explosion
 from Agent import Agent
 from Player import Player
-import Astar
+import Astar as astar
 
 # Global variable that may be changed when loading maze
 __screenSize__ = (2000,1200)
@@ -74,7 +74,6 @@ class Grid:
 
 
 
-
 class Assets:
     def __init__(self):
         global __cellSize__ 
@@ -87,6 +86,8 @@ class Assets:
             img.set_colorkey((0,0,0))
             img = pygame.transform.scale(img, (__cellSize__ * 3, __cellSize__ * 3))
             self.explosionAnim.append(img)
+
+
 
 class Scene:
     _mouseCoords = (0,0)
@@ -101,150 +102,96 @@ class Scene:
         self._grid = Grid(mazename)
         __screenSize__ = tuple(s * __cellSize__ for s in self._grid._grid.shape)
         __gridDim__ = self._grid._grid.shape
-        
         self._screen = pygame.display.set_mode(__screenSize__)
-        
         self.assets = Assets()
         self._font = pygame.font.SysFont('Arial',25)
-        self.agents = [Agent(700, 250, 1), Agent(200, 40, 2), Agent(400, 400, 4), Agent(500, 300, 3)]
+        self.agents = [Agent(700, 250, 3), Agent(400, 150, 2), Agent(200, 40, 4), Agent(500, 300, 1)]
         self.player = Player()
 
 
+    ### ADDED FROM THE ORIGINAL CODE
     def outside_map_x(self, dst_x):
         return 1 if dst_x >= int(__screenSize__[0]/__cellSize__) or dst_x <= 0 else 0
-        
+    
+    ### ADDED FROM THE ORIGINAL CODE
     def outside_map_y(self, dst_y):
         return 1 if dst_y >= int(__screenSize__[1]/__cellSize__) or dst_y <= 0 else 0
     
+    ### ADDED FROM THE ORIGINAL CODE
+    def movePlayer(self):
     
-    def update_sightAgent(self):
+        # destination, next tile
+        dst_x = int((self.player.x + self.player.speed * self.player.dir_x) / __cellSize__)
+        dst_y = int((self.player.y + self.player.speed * self.player.dir_y) / __cellSize__)
         
-        for a in self.agents:
-            # find the left and right angle for the visionSight
-            leftAngle = a.angleOrientation-a.wideRange
-            rightAngle = a.angleOrientation+a.wideRange
-            
-            # list for the index and the range of the raycast
-            a.raylist.clear()
-            
-            # position of the  agent
-            x1 = int((a.x)/__cellSize__)
-            y1 = int((a.y)/__cellSize__)
-            
-            last_dist =  -1
-            seen_player = 0
-            yet_detected = 0
-            
-            # for each ray in the visionSight
-            for index, angleray in enumerate(np.arange(leftAngle,rightAngle,1)):
-                
-                # get a ray from the angle and the  max distance
-                ray = a._angleToOrientVector(angleray, a.lengthRange)
-                # find the limit of the ray
-                x2 = int((a.x+ray[0])/__cellSize__)
-                y2 = int((a.y+ray[1])/__cellSize__)
-                # limit the ray inside the map
-                x2 = int(__screenSize__[0]/__cellSize__)-1 if self.outside_map_x(x2) else x2
-                y2 = int(__screenSize__[1]/__cellSize__)-1 if self.outside_map_y(y2) else y2   
-                # return the  position of the player and the position of the obstacle if finded else 0
-                pos_player, pos_obstacle = self.firstObstacle(x1, y1, x2, y2)
-                
-                # get the max distance
-                if pos_obstacle:
-                    dist = (pos_obstacle[0] - x1)**2 +(pos_obstacle[1] - y1)**2
-                else:
-                    dist = a.lengthRange
-                
-                # this ray is the first to detect the player
-                if pos_player and not yet_detected:
-                    #print("detected")
-                    a.chasing = 1
-                    a.inSight = 1
-                    a.last_position_player = pos_player
-                    yet_detected = 1
-                 
-                # adapt the visionSight to obstacle       
-                if last_dist != dist:
-                    if index != 0:
-                        a.raylist.append((index-1, last_dist))
-                    a.raylist.append((index, dist))
-                last_dist = dist 
-                
-            # add the last index
-            a.raylist.append((index, dist)) 
-            
-            
+        # check if not outside the map or a wall
+        def wall(dst_x, dst_y):
+            return 1 if self._grid._grid.item(int(dst_x), int(dst_y)) else 0
+
+        dst_x_is_out = self.outside_map_x(dst_x)
+        dst_y_is_out = self.outside_map_y(dst_y)
         
-            player_x, player_y = int(self.player.x/__cellSize__), int(self.player.y/__cellSize__)
-            distance = int(math.sqrt((player_x-x1)**2 + (player_y-y1)**2))
-            #print("distanced", distance)
-            
-            if distance <2.5 and not yet_detected:
+        if not dst_x_is_out and not dst_y_is_out:
+            is_wall = wall(dst_x, dst_y)
+            if not is_wall:
+                # set the new position
+                self.player.x += self.player.speed * self.player.dir_x
+                self.player.y += self.player.speed * self.player.dir_y
                 
-                a.chasing = 1
                 
-                a.inSight = 1
-                a.last_position_player = player_x, player_y
-                yet_detected = 1
-            
-            # if no ray detect the player, no detection in this visionSight
-   
-            if not yet_detected:
-                a.inSight = 0
-     
-            
-            
-            
+    ### ADDED FROM THE ORIGINAL CODE           
     def moveAgents(self):
         
-        d = { (0,-1): 90, (1,0): 0,  (1,-1): 45, (-1, -1): 135, (-1, 0): 180,  (-1, 1): 225, (0,1): 270, (0,0): 270, (1,1): 315, }
+        # movement & angle
+        nextTileMovement = { (0,-1): 90, (1,0): 0,  (1,-1): 45, (-1, -1): 135, (-1, 0): 180,  (-1, 1): 225, (0,1): 270, (0,0): 270, (1,1): 315, }
         
         for a in self.agents: 
-       
-            # the  player has been seen, move toward him
+            # the player has been seen, move toward his last known position
             if a.chasing:
-                
-                if a.team == 4:
-                    a.speed = 3.5
-                    a.wideRange = 100     
-                    a.lengthRange = 100
-       
-                    
                 # follow A* direction
                 x_player, y_player = a.last_position_player 
-                print("aie", x_player, y_player )
-                #print("x_player, y_player",x_player, y_player)  
-                # print("x_player, y_player", x_player, y_player)
-                # print("(int(a.x/__cellSize__), int(a.y/__cellSize__)", int(a.x/__cellSize__), int(a.y/__cellSize__))
-                self.path = Astar.astar(self._grid._grid, (int(a.x/__cellSize__), int(a.y/__cellSize__)), (x_player, y_player))
-                #print("path", path)
-                if len(self.path)==1:
-                    pass
-                else:
-                    self.path.pop(0)
-               
-                # get the direction from A*
-                a.dir_x = self.path[0][0] 
-                a.dir_y = self.path[0][1] 
+                # the player is still in sight
+                if a.inSight:
+                    # compute A*
+                    a.path = astar.astar(self._grid._grid, (int(a.x/__cellSize__), int(a.y/__cellSize__)), (x_player, y_player))
+                    a.path.pop(0)
+                    # special comportment for agent 4 (pink)
+                    if a.team == 4:
+                        a.speed = 1.5
+                        a.wideRange = 80     
+                        a.lengthRange = 80
                 
-                a.x = a.x + a.speed * a.dir_x
-                a.y = a.y + a.speed * a.dir_y
-                a.angleOrientation  = d.get((a.dir_x,a.dir_y))
-                
-                self.path.pop(0)
-                
-                if len(self.path) == 0:
+                if len(a.path) == 0:
+                    print("I LOST HIM, BECAREFUL HE IS NOT FAR")
                     a.chasing = 0
                     a.inSight = 0
+                    continue
+                    
+                # get the position from the A* list
+                a.next_pos_x, a.next_pos_y = a.path[0][0], a.path[0][1] 
+                curr_pos_normalized_x = int(a.x/__cellSize__)
+                curr_pos_normalized_y = int(a.y/__cellSize__)
+                # Define direction in x and y
+                a.dir_x = 1 if a.next_pos_x > curr_pos_normalized_x else 0 if a.next_pos_x ==curr_pos_normalized_x else -1
+                a.dir_y = 1 if a.next_pos_y > curr_pos_normalized_y else 0 if a.next_pos_y == curr_pos_normalized_y else -1
+                a.x = a.x + a.speed * a.dir_x
+                a.y = a.y + a.speed * a.dir_y
+                # when the player reached the nex pos, withdraw the position from the A* list
+                if int(a.x/__cellSize__) == a.next_pos_x and int(a.y/__cellSize__) == a.next_pos_y :
+                    a.path.pop(0)
+                # from the direction, conversion into an angle
+                a.angleOrientation  = nextTileMovement.get((a.dir_x,a.dir_y))
                 
             # Not seen the player, random move   
             else:
                
                 if a.team == 4:
-                    a.speed = 1
-                    a.wideRange = 50     
-                    a.lengthRange = 60
-                # next cell
+                    a.speed = 0.5
+                    a.angleSpeed = 0.5   # turning speed
+                    a.wideRange = 30     #  wide sight
+                    a.lengthRange = 50 # length of sight
+                    
+                # sometimes, make a random move to break linearity
                 if random.random() < 0.015:
                     new_dir = [1, -1]
                     a.dir_x = random.choice(new_dir)
@@ -273,35 +220,84 @@ class Scene:
                 a.angleOrientation += a.angleSpeed
                 if a.angleOrientation > 359:
                     a.angleOrientation = 0
-                
                 pass
+      
+            
+    ### ADDED FROM THE ORIGINAL CODE
+    def update_sightAgent(self):
+        
+        for a in self.agents:
+            # find the left and right angle for the visionSight
+            leftAngle = a.angleOrientation-a.wideRange
+            rightAngle = a.angleOrientation+a.wideRange
+            
+            # list for the index and the range of the raycast
+            a.raylist.clear()
+            
+            # position of the  agent
+            x1 = int((a.x)/__cellSize__)
+            y1 = int((a.y)/__cellSize__)
+            
+            last_dist =  -1
+            yet_detected = 0
+            
+            # for each ray in the visionSight
+            for index, angleray in enumerate(np.arange(leftAngle,rightAngle,1)):
                 
+                # get a ray from the angle and the  max distance
+                ray = a._angleToOrientVector(angleray, a.lengthRange)
+                # find the limit of the ray
+                x2 = int((a.x+ray[0])/__cellSize__)
+                y2 = int((a.y+ray[1])/__cellSize__)
+                # limit the ray inside the map
+                x2 = int(__screenSize__[0]/__cellSize__)-1 if self.outside_map_x(x2) else x2
+                y2 = int(__screenSize__[1]/__cellSize__)-1 if self.outside_map_y(y2) else y2   
+                # return the  position of the player and the position of the obstacle if finded else 0
+                pos_player, pos_obstacle = self.firstObstacle(x1, y1, x2, y2)
+                
+                # get the max distance
+                if pos_obstacle:
+                    dist = (pos_obstacle[0] - x1)**2 +(pos_obstacle[1] - y1)**2
+                else:
+                    dist = a.lengthRange
+                
+                # this ray is the first to detect the player
+                if pos_player and not yet_detected:
+                    print("INTRUDER DETECTED!!!")
+                    a.chasing = 1
+                    a.inSight = 1
+                    a.last_position_player = pos_player
+                    yet_detected = 1
+                 
+                # adapt the visionSight to obstacle       
+                if last_dist != dist:
+                    if index != 0:
+                        a.raylist.append((index-1, last_dist))
+                    a.raylist.append((index, dist))
+                last_dist = dist 
+            # add the last index
+            a.raylist.append((index, dist)) 
             
             
-    def movePlayer(self):
-    
-        # destination
-        dst_x = int((self.player.x + self.player.speed * self.player.dir_x) / __cellSize__)
-        dst_y = int((self.player.y + self.player.speed * self.player.dir_y) / __cellSize__)
-    
-        # check if not outside the map
         
-        def wall(dst_x, dst_y):
-            if self._grid._grid.item(int(dst_x), int(dst_y)):
-                return 1
-            else:
-                return 0
-
-        dst_x_is_out = self.outside_map_x(dst_x)
-        dst_y_is_out = self.outside_map_y(dst_y)
-        
-        
-        if not dst_x_is_out and not dst_y_is_out:
-            is_wall = wall(dst_x, dst_y)
-            if not is_wall:
-                self.player.x += self.player.speed * self.player.dir_x
-                self.player.y += self.player.speed * self.player.dir_y
-        
+            player_x, player_y = int(self.player.x/__cellSize__), int(self.player.y/__cellSize__)
+            distance = int(math.sqrt((player_x-x1)**2 + (player_y-y1)**2))
+            
+            if distance <2.5 and not yet_detected:
+                
+                a.chasing = 1
+                a.inSight = 1
+                a.last_position_player = player_x, player_y
+                yet_detected = 1
+            
+            # if no ray detect the player, no detection in this visionSight
+            if not yet_detected:
+                a.inSight = 0
+            
+            pass
+     
+            
+            
 
     def drawMe(self):
         if self._grid._grid is None:
@@ -406,24 +402,19 @@ class Scene:
         
         return self._mapOnPath(x1, y1, x2, y2, _mapLevel)
 
+    ### ADDED FROM THE ORIGINAL CODE
     # O if there is no wall on the path, otherwise gives the first wall coordinates
     def firstObstacle(self, x1, y1, x2, y2):
-        
-        # x_player = int(self.player.x/__cellSize__)
-        # y_player = int(self.player.y/__cellSize__)
 
         x2 = __screenSize__[0]-2 if self.outside_map_x(x2) else x2
         y2 = __screenSize__[1]-2 if self.outside_map_y(y2) else y2
-        
         _mapLevel = lambda x, y : (x,y) if self._grid._grid[x, y] == 1 else 0
         return self._mapOnPath(x1, y1, x2, y2, _mapLevel) 
 
     def update(self):
         
-        
         self.update_sightAgent()
         self.moveAgents()
-    
         self.player.input()
         self.movePlayer()
         self.allsprites.update()
@@ -439,7 +430,7 @@ def main():
     #_, grid = loadmidimazefile("mazes/WS32.MAZ")
     buildingGrid = False #True if the user can add / remove walls / weights
     scene = Scene()#Scene("mazes/WS32-bis.MAZ")
-    scene._grid.loadTextMaze("maze.maz")
+    scene._grid.loadTextMaze("maze_difficult.maz")
 
     # position at the start
     x1 = __screenSize__[0]/3/__cellSize__

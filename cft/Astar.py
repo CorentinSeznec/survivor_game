@@ -1,3 +1,4 @@
+import time 
 class Node():
 
     def __init__(self, parent=None, position=None, direction = (0,0)):
@@ -13,7 +14,7 @@ class Node():
 
 
 def astar(maze, start, end):
-
+    timer_start = time.time()
     # start and end node
     start_node = Node(None, start)
     start_node.g, start_node.h, start_node.f = 0, 0, 0
@@ -24,13 +25,13 @@ def astar(maze, start, end):
     open_list = []
     closed_list = []
   
-
+    
     # Add the start node
     open_list.append(start_node)
-
+    l = 0
     # Loop until you find the end
     while len(open_list) > 0:
-
+        
         # Get the current node
         current_node = open_list[0]
         current_index = 0
@@ -48,8 +49,9 @@ def astar(maze, start, end):
             path = []
             current = current_node
             while current is not None:
-                path.append(current.direction)
+                path.append(current.position)
                 current = current.parent
+            
             return path[::-1] # Return reversed path
 
         # Generate children
@@ -103,7 +105,7 @@ def astar(maze, start, end):
 
             # Add the child to the open list
             open_list.append(child)
-
+        l+=1
 
 # def main():
 

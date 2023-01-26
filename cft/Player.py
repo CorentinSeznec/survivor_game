@@ -8,7 +8,7 @@ class Player:
         self.x = 820
         self.y = 480
         self.health = 100
-        self.speed = 3
+        self.speed = 1.75
         self.dir_x = -1 # 1 ou -1
         self.dir_y = 0
         self.angleOrientation = 180
@@ -35,7 +35,7 @@ class Player:
                 (self.x+orientation[0], self.y + orientation[1]),1)
         pass
     
-            
+    ### ADDED FROM THE ORIGINAL CODE
     def input(self):
 
         keys = pygame.key.get_pressed()
