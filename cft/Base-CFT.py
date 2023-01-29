@@ -4,12 +4,11 @@ import pygame
 import pygame.draw
 import numpy as np
 import time
-
-
 from Explosion import Explosion
 from Agent import Agent
 from Player import Player
 import Astar as astar
+#import AstarArray as astar 
 
 # Global variable that may be changed when loading maze
 __screenSize__ = (2000,1200)
@@ -162,7 +161,6 @@ class Scene:
                         a.lengthRange = 80
                 
                 if len(a.path) == 0:
-                    print("I LOST HIM, BECAREFUL HE IS NOT FAR")
                     a.chasing = 0
                     a.inSight = 0
                     continue
@@ -263,7 +261,7 @@ class Scene:
                 
                 # this ray is the first to detect the player
                 if pos_player and not yet_detected:
-                    print("INTRUDER DETECTED!!!")
+
                     a.chasing = 1
                     a.inSight = 1
                     a.last_position_player = pos_player
@@ -430,8 +428,10 @@ def main():
     #_, grid = loadmidimazefile("mazes/WS32.MAZ")
     buildingGrid = False #True if the user can add / remove walls / weights
     scene = Scene()#Scene("mazes/WS32-bis.MAZ")
-    scene._grid.loadTextMaze("maze_difficult.maz")
-
+    
+    #scene._grid.loadTextMaze("maze_difficult.maz")
+    scene._grid.loadTextMaze("maze.maz")
+    
     # position at the start
     x1 = __screenSize__[0]/3/__cellSize__
     y1 = __screenSize__[1]/2/__cellSize__
